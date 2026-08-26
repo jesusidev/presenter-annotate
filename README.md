@@ -22,14 +22,85 @@ Below the column's own width the page reflows, so no single ruler can be exact. 
 
 ---
 
-## Install
+## Quick start
 
-No registry. Install straight from a path or a git URL:
+Two terminals and about a minute.
+
+**1. Install it.** There is no npm registry involved — this installs straight from GitHub:
 
 ```bash
 npm i github:jesusidev/presenter-annotate
-npm i file:../presenter-annotate      # while working on it
 ```
+
+The install takes a few seconds longer than you expect. That is on purpose: `dist/` is not committed, so npm clones the repo, runs the build, and packs the result. Nothing is checked in that could go stale against the source.
+
+**2. Start the relay** — the thing every browser connects to:
+
+```bash
+npx presenter-annotate serve
+```
+
+It prints the websocket URL and the script tag, and warns you that it has no authentication. Leave it running.
+
+**3. Put the overlay on the page.** React:
+
+```tsx
+import { PresenterAnnotate } from 'presenter-annotate/react';
+
+<PresenterAnnotate />
+```
+
+Or any page at all, no build step:
+
+```html
+<script src="http://localhost:7420/embed.js" data-present></script>
+```
+
+**4. Open the page with `?present`** — you get a toolbar. Everyone else opens the same URL without it and just watches.
+
+### Requirements
+
+- **Node 20 or newer** for the relay and the CLI. Developed on 24.
+- **React 18 or 19** only if you use the React binding. It is an optional peer dependency, so the script tag route pulls no React at all.
+- The package is **ESM only**. `import` works; `require()` will not, by design.
+
+### Presenting to people who are not on your machine
+
+The relay listens on localhost. For a room that is not sitting next to you, put a tunnel in front of it and point the clients at that:
+
+```bash
+npx presenter-annotate serve --port 7420
+ngrok http 7420          # or cloudflared, or tailscale
+```
+
+```html
+<script src="https://your-tunnel.example/embed.js" data-present></script>
+```
+
+Read [Security](#security) before you do this. A tunnel makes the relay reachable by anyone who has the URL.
+
+---
+
+## Local development
+
+Working on the package itself:
+
+```bash
+git clone git@github.com:jesusidev/presenter-annotate.git
+cd presenter-annotate
+npm install          # runs the build via `prepare`
+npm test             # relay (10) + geometry (13)
+npm run type-check
+```
+
+To develop it against a real app, install by path and rebuild as you go:
+
+```bash
+npm i file:../presenter-annotate     # in the consuming app
+npm run build                        # in the package, after each change
+```
+
+`file:` installs symlink, so a rebuild is picked up without reinstalling — but unlike a git install they do **not** run `prepare` for you, which is why the build is a separate step here.
 
 ---
 
@@ -145,6 +216,7 @@ src/bindings/
   embed.ts         IIFE for the script tag
 server/relay.mjs   rooms, replay on join, live-stroke pass-through
 bin/cli.mjs        npx presenter-annotate serve
+dist/              built, not committed — `prepare` makes it on install
 ```
 
 Both bindings mount the **same** core. The React component is lifecycle and nothing else, which is why supporting a script tag did not double the work.
@@ -167,6 +239,28 @@ npm test             # relay (10) + geometry (13)
 ```
 
 The relay test drives **real websocket clients through a real relay** — a mark drawn by one arriving at another, a late joiner being caught up, a half-finished stroke not being stored, rooms staying isolated. Those are protocol behaviours, so a unit test would not have proven them.
+
+---
+
+## Troubleshooting
+
+**`npm warn allow-scripts … presenter-annotate (prepare: node scripts/build.mjs)`**
+Expected on npm 11+. The build still ran — npm runs `prepare` inside its own clone before packing, which is a different step from the lifecycle scripts that warning is gating. Confirm with `ls node_modules/presenter-annotate/dist`. If `dist/` is there, you are fine.
+
+**`ERR_MODULE_NOT_FOUND` or an empty `dist/`**
+The `prepare` build did not run. Almost always a `file:` install, which symlinks and skips `prepare`. Run `npm run build` in the package.
+
+**`ERR_REQUIRE_ESM` / "No exports main defined"**
+Something is trying to `require()` an ESM-only package. Use `import`. In a CommonJS file, `await import('presenter-annotate')`.
+
+**The toolbar never appears**
+`?present` in the URL, or `data-present` on the script tag. Without one of them this browser is a viewer, which is the intended default — you should have to opt *in* to drawing.
+
+**Marks land in the wrong place for other people**
+The content column is being measured differently in the two browsers. Put `data-annotation-frame` on your content wrapper, or pass `data-frame="main"`. See [the bit that matters](#the-bit-that-matters).
+
+**Nothing arrives on the other screen**
+Both browsers need the same relay *and* the same room. Check the relay terminal for two connections. If you are tunnelling, an `https` page cannot open a `ws://` socket — you need `wss://`.
 
 ---
 
