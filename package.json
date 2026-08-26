@@ -9,11 +9,11 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/core.d.ts",
+      "types": "./dist/types/core/index.d.ts",
       "import": "./dist/core.js"
     },
     "./react": {
-      "types": "./dist/react.d.ts",
+      "types": "./dist/types/bindings/react.d.ts",
       "import": "./dist/react.js"
     },
     "./server": "./server/relay.mjs",
@@ -22,6 +22,7 @@
   "files": ["dist", "server", "bin", "README.md"],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "prepare": "node scripts/build.mjs",
     "type-check": "tsc --noEmit",
     "test": "node scripts/relay-test.mjs && node scripts/geometry-test.mjs",
     "serve": "node bin/cli.mjs serve"

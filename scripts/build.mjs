@@ -1,14 +1,21 @@
+import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 
 /**
- * Three outputs, one core.
+ * Three outputs, one core, plus types.
  *
  *   core.js         ESM, for anything that wants the framework-free API
  *   react.js        ESM, React peer-dep left external
  *   embed.global.js IIFE, everything inlined, for a <script> tag on any page
+ *   types/          .d.ts, emitted by tsc — esbuild strips types, it cannot emit them
  *
  * The embed is the only one that bundles its dependencies, because it lands on
  * a page that will not be running a bundler.
+ *
+ * This runs as `prepare`, which means npm also runs it when someone installs
+ * the package straight from the git URL. That is the only reason a git install
+ * works at all: dist/ is not committed, so without this the package would
+ * arrive with every one of its export paths pointing at nothing.
  */
 
 const shared = {
@@ -44,4 +51,22 @@ await build({
   minify: true,
 });
 
-console.log('\n  built: dist/core.js, dist/react.js, dist/embed.global.js\n');
+// tsconfig sets noEmit for the type-check script, so declarations are a
+// separate pass with that turned back off.
+execFileSync(
+  'npx',
+  [
+    'tsc',
+    '--declaration',
+    '--emitDeclarationOnly',
+    '--noEmit',
+    'false',
+    '--outDir',
+    'dist/types',
+    '--rootDir',
+    'src',
+  ],
+  { stdio: 'inherit' }
+);
+
+console.log('\n  built: dist/core.js, dist/react.js, dist/embed.global.js, dist/types\n');
