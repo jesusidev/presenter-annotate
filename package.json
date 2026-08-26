@@ -1,0 +1,50 @@
+{
+  "name": "presenter-annotate",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared annotation over any page you are presenting — draw, everyone sees it. React component or one script tag.",
+  "type": "module",
+  "bin": {
+    "presenter-annotate": "./bin/cli.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./server": "./server/relay.mjs",
+    "./embed.js": "./dist/embed.global.js"
+  },
+  "files": ["dist", "server", "bin", "README.md"],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "type-check": "tsc --noEmit",
+    "test": "node scripts/relay-test.mjs && node scripts/geometry-test.mjs",
+    "serve": "node bin/cli.mjs serve"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true },
+    "react-dom": { "optional": true }
+  },
+  "dependencies": {
+    "ws": "^8.21.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "@types/react": "^19.1.0",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.3"
+  },
+  "volta": {
+    "node": "24.14.0"
+  }
+}
