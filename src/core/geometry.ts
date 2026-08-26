@@ -19,8 +19,29 @@ import type { AnnotationColor, Point } from './types';
  * is exact at every width wide enough to show the column.
  *
  * Below the frame's own width the page reflows — text takes more lines, so the
- * content is genuinely taller and no single ruler can be exact. Marks are
- * proportional there, not precise. That is a real limit, not a bug to fix.
+ * content is genuinely taller, and a fraction of total height stops pointing at
+ * the same paragraph. That is what the ANCHOR below exists to solve.
+ *
+ * Measured against a real page (a 1140px column at 1728px, reopened narrower):
+ *
+ *   viewer 1280px   0px off        nothing reflows above the column's cap
+ *   viewer 1000px   14px off       21px of reflow
+ *   viewer  900px   48px off       106px of reflow
+ *   viewer  800px   61px off       159px of reflow
+ *
+ * An ANCHOR fixes that. A committed mark records the element underneath it and
+ * stores its points against THAT element's box instead of the page's. A box
+ * drawn around a button keeps hugging the button at any width, because the
+ * button is the ruler — and a page that reflowed by 159px moved the button and
+ * the mark together.
+ *
+ * An anchor is measured per axis, against the element's real width and height.
+ * A first attempt scaled both axes by the element's width, on the theory that
+ * one unit for both axes keeps a square square. Two real browsers disproved it:
+ * a checkbox button went 1066px wide to 726px while staying 67px tall, so
+ * uniform scaling squashed the box to 57px and it no longer contained the thing
+ * it was drawn around. Marks track the element's shape, deliberately — what the
+ * facilitator drew was "around this", not "a square".
  */
 export type Frame = { left: number; top: number; width: number; height: number };
 

@@ -18,6 +18,31 @@ export type AnnotationColor = 'amber' | 'red' | 'brand';
 export type Point = [number, number];
 
 /**
+ * The element a mark is pinned to.
+ *
+ * The frame is a good ruler until the page reflows — below the content
+ * column's own width text takes more lines, the page gets taller, and a
+ * fraction of total height stops pointing at the same paragraph. Measured on a
+ * real page: 48px off at 900px, 61px at 800px.
+ *
+ * So a committed mark also records the element underneath it. `points` here are
+ * measured against that element's box, per axis — which pins the mark to the
+ * thing it was drawn on, and lets a box drawn around a button keep hugging that
+ * button even when the button itself changes shape.
+ *
+ * Optional throughout. A mark whose anchor cannot be resolved — the element is
+ * gone, the selector no longer matches, the mark predates this field — falls
+ * back to the frame fractions in `AnnotationShape.points` and renders exactly
+ * as it always did.
+ */
+export type Anchor = {
+  /** A CSS selector resolving to the anchor element. */
+  path: string;
+  /** Points against the anchor's box, both axes scaled by its width. */
+  points: Point[];
+};
+
+/**
  * A mark drawn over a page.
  *
  * Points are FRACTIONS of the frame box, never pixels. The presenter is on a
@@ -35,6 +60,8 @@ export type AnnotationShape = {
   tool: DrawTool;
   color: AnnotationColor;
   points: Point[];
+  /** Where this mark is pinned. Absent on live strokes and on older marks. */
+  anchor?: Anchor | null;
   at: number;
   by: string;
 };
@@ -99,6 +126,27 @@ export function parseMessage(raw: unknown): ServerMessage | null {
   }
 }
 
+const isPointList = (value: unknown): value is Point[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])
+  );
+
+/**
+ * An anchor is valid or absent — never half-formed.
+ *
+ * A malformed anchor is rejected rather than the whole mark, because the frame
+ * fractions still render it correctly. Losing the pin is a worse mark; losing
+ * the mark is a missing one.
+ */
+function isValidAnchor(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value !== 'object') return false;
+  const anchor = value as Partial<Anchor>;
+  return typeof anchor.path === 'string' && anchor.path.length > 0 && isPointList(anchor.points);
+}
+
 /** Shape-level validation, so a malformed mark cannot break a viewer's render. */
 export function isShape(value: unknown): value is AnnotationShape {
   if (typeof value !== 'object' || value === null) return false;
@@ -108,10 +156,7 @@ export function isShape(value: unknown): value is AnnotationShape {
     typeof s.scope === 'string' &&
     typeof s.color === 'string' &&
     (s.tool === 'arrow' || s.tool === 'box' || s.tool === 'pen' || s.tool === 'highlight') &&
-    Array.isArray(s.points) &&
-    s.points.length > 0 &&
-    s.points.every(
-      (p) => Array.isArray(p) && p.length === 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])
-    )
+    isPointList(s.points) &&
+    isValidAnchor(s.anchor)
   );
 }

@@ -14,6 +14,7 @@ import {
 } from './geometry';
 import { type AnnotationState, type Store, visibleLive, visibleShapes } from './store';
 import {
+  type Anchor,
   type AnnotationColor,
   type AnnotationShape,
   type AnnotationTool,
@@ -23,6 +24,14 @@ import {
 } from './types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * How far up the tree a selector path may go.
+ *
+ * Deep enough to be specific, shallow enough that the path stays short and
+ * does not encode every wrapper div between the mark and the body.
+ */
+const MAX_ANCHOR_DEPTH = 12;
 
 export type SurfaceOptions = {
   /** The element the SVG is sized to. Marks may sit anywhere inside it. */
@@ -89,6 +98,151 @@ export function createSurface(options: SurfaceOptions) {
     render();
   }
 
+  // ------------------------------------------------------------------ anchors
+
+  /**
+   * A selector for an element, stable enough to resolve in another browser
+   * showing the same page.
+   *
+   * `nth-of-type` rather than `nth-child` so that a conditionally rendered
+   * sibling of a different tag does not shift the index. A host app can do
+   * better by putting `data-annotation-id` on the things worth pointing at,
+   * which is honoured first and ends the path immediately.
+   */
+  function selectorPath(element: HTMLElement): string | null {
+    const parts: string[] = [];
+    let node: HTMLElement | null = element;
+    let depth = 0;
+
+    while (node && node !== document.body && depth < MAX_ANCHOR_DEPTH) {
+      const explicit = node.getAttribute('data-annotation-id');
+      if (explicit) {
+        parts.unshift(`[data-annotation-id="${CSS.escape(explicit)}"]`);
+        return parts.join(' ');
+      }
+
+      const parent: HTMLElement | null = node.parentElement;
+      if (!parent) return null;
+
+      const tag = node.tagName.toLowerCase();
+      const sameTag = Array.from(parent.children).filter((c) => c.tagName === node?.tagName);
+      parts.unshift(`${tag}:nth-of-type(${sameTag.indexOf(node) + 1})`);
+
+      node = parent;
+      depth += 1;
+    }
+
+    if (parts.length === 0) return null;
+    // Anchored at body when we walked all the way; otherwise a loose descendant
+    // selector, which is what makes a capped path still resolve.
+    return node === document.body ? `body > ${parts.join(' > ')}` : parts.join(' > ');
+  }
+
+  /**
+   * The topmost page element at a point, ignoring our own overlay.
+   *
+   * `elementsFromPoint` rather than `elementFromPoint` because while a tool is
+   * armed the SVG has pointer-events and would otherwise be the only answer.
+   */
+  function elementAt(stageX: number, stageY: number): HTMLElement | null {
+    if (typeof document.elementsFromPoint !== 'function') return null;
+    const stageRect = stage.getBoundingClientRect();
+    const clientX = stageX + stageRect.left;
+    const clientY = stageY + stageRect.top;
+    if (clientX < 0 || clientY < 0 || clientX > innerWidth || clientY > innerHeight) return null;
+
+    for (const candidate of document.elementsFromPoint(clientX, clientY)) {
+      // The SVG overlay is an SVGElement, so this excludes it outright.
+      if (!(candidate instanceof HTMLElement)) continue;
+      if (candidate.closest('.pa-toolbar')) continue;
+      if (candidate === document.body || candidate === document.documentElement) continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  /** An anchor's box in stage coordinates, or null when it no longer resolves. */
+  function resolveAnchor(path: string): Frame | null {
+    let element: HTMLElement | null = null;
+    try {
+      element = document.querySelector<HTMLElement>(path);
+    } catch {
+      return null; // A path that is not valid CSS is simply not an anchor.
+    }
+    if (!element) return null;
+
+    const rect = element.getBoundingClientRect();
+    // A zero-sized box is not a ruler. Either axis being flat would divide by
+    // zero on the way in and multiply by zero on the way out.
+    if (rect.width === 0 || rect.height === 0) return null;
+
+    const stageRect = stage.getBoundingClientRect();
+    return {
+      left: rect.left - stageRect.left,
+      top: rect.top - stageRect.top,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  /**
+   * The point a mark should be pinned by.
+   *
+   * An arrow is pinned by its TIP, because the tip is the thing being pointed
+   * at — pinning it by its middle would anchor it to whatever blank space the
+   * shaft crosses. Everything else is pinned by the centre of its extent, which
+   * for a box drawn around a button is the button, even though the drag started
+   * outside it.
+   */
+  function probePoint(tool: DrawTool, points: Point[]): Point | null {
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (!first || !last) return null;
+    if (tool === 'arrow') return last;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [x, y] of points) {
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    return [(minX + maxX) / 2, (minY + maxY) / 2];
+  }
+
+  /**
+   * Re-measure a finished mark against the element underneath it.
+   *
+   * Done at commit rather than at pointer-down on purpose: only the finished
+   * mark knows its own extent, and it is the extent — not the corner the drag
+   * happened to start at — that says what the mark is about.
+   */
+  function buildAnchor(tool: DrawTool, points: Point[]): Anchor | null {
+    const probe = probePoint(tool, points);
+    if (!probe) return null;
+
+    const element = elementAt(projectX(probe[0], frame), projectY(probe[1], frame));
+    if (!element) return null;
+
+    const path = selectorPath(element);
+    if (!path) return null;
+
+    // Must round-trip: if the path does not resolve back to a box, an anchor
+    // would be a promise we cannot keep at render time.
+    const ruler = resolveAnchor(path);
+    if (!ruler) return null;
+
+    const anchored = points.map<Point>(([fx, fy]) => [
+      (projectX(fx, frame) - ruler.left) / ruler.width,
+      (projectY(fy, frame) - ruler.top) / ruler.height,
+    ]);
+
+    return { path, points: anchored };
+  }
+
   // ------------------------------------------------------------------ render
 
   function markElement(shape: AnnotationShape, live: boolean): SVGGElement {
@@ -97,7 +251,20 @@ export function createSurface(options: SurfaceOptions) {
     if (live) g.setAttribute('opacity', '0.85');
 
     const stroke = STROKE[shape.color] ?? STROKE.amber;
-    const points = shape.points;
+
+    /**
+     * Anchor first, frame second.
+     *
+     * When the anchor resolves the mark is drawn against the element it was
+     * pinned to, which is what keeps it on that element at a different window
+     * width. When it does not — element gone, page changed, mark older than
+     * this field — the frame fractions still describe the mark, so it renders
+     * the way it always did rather than not at all.
+     */
+    const anchored = shape.anchor ? resolveAnchor(shape.anchor.path) : null;
+    const ruler = anchored ?? frame;
+    const points = anchored && shape.anchor ? shape.anchor.points : shape.points;
+
     const first = points[0] as Point;
     const last = points[points.length - 1] as Point;
 
@@ -115,20 +282,20 @@ export function createSurface(options: SurfaceOptions) {
 
     switch (shape.tool) {
       case 'pen':
-        line(penPath(points, frame), 3);
+        line(penPath(points, ruler), 3);
         break;
 
       case 'arrow': {
         if (points.length < 2) break;
-        const d = `M ${projectX(first[0], frame)},${projectY(first[1], frame)} L ${projectX(last[0], frame)},${projectY(last[1], frame)}`;
+        const d = `M ${projectX(first[0], ruler)},${projectY(first[1], ruler)} L ${projectX(last[0], ruler)},${projectY(last[1], ruler)}`;
         line(d, 3);
-        line(arrowHead(first, last, frame), 3);
+        line(arrowHead(first, last, ruler), 3);
         break;
       }
 
       case 'box': {
         if (points.length < 2) break;
-        const r = boxRect(first, last, frame);
+        const r = boxRect(first, last, ruler);
         const rect = document.createElementNS(SVG_NS, 'rect');
         rect.setAttribute('x', String(r.x));
         rect.setAttribute('y', String(r.y));
@@ -146,7 +313,7 @@ export function createSurface(options: SurfaceOptions) {
         if (points.length < 2) break;
         // A thick, low-opacity band along the drag — the marker-pen look, which
         // reads better over text than a filled rectangle.
-        const d = `M ${projectX(first[0], frame)},${projectY(first[1], frame)} L ${projectX(last[0], frame)},${projectY(last[1], frame)}`;
+        const d = `M ${projectX(first[0], ruler)},${projectY(first[1], ruler)} L ${projectX(last[0], ruler)},${projectY(last[1], ruler)}`;
         const path = document.createElementNS(SVG_NS, 'path');
         path.setAttribute('d', d);
         path.setAttribute('fill', 'none');
@@ -245,7 +412,12 @@ export function createSurface(options: SurfaceOptions) {
       if (Math.hypot(to[0] - from[0], to[1] - from[1]) < MIN_TRAVEL) return;
     }
 
-    const shape = buildShape(points);
+    // Pin the finished mark to whatever it was drawn on. Live strokes stay
+    // frame-only: they are ephemeral, and probing the DOM 30 times a second to
+    // pin something that is about to be replaced would be work for nothing.
+    const base = buildShape(points);
+    const shape: AnnotationShape = { ...base, anchor: buildAnchor(base.tool, points) };
+
     store.applyLocal({ type: 'annotate', shape });
     options.onDraw(shape);
     render();
