@@ -38,6 +38,18 @@ End to end, presenter at 1728px and viewer at 800px, boxing the same button with
 
 Anchors are optional everywhere. A mark whose element cannot be resolved — page changed, selector no longer matches, mark predates the field — falls back to the column fractions and renders exactly as it always did.
 
+**An element as wide as the window is refused as an anchor.** Measured on a real page: a mark drawn in the left margin anchored to `<main>`, which was 1728px wide. Anchoring to that measures the mark against the *window* — the exact ruler this package exists to avoid. A full-width wrapper is not content, it is the page, and the page is not a thing you can point at. The only exception is when the host declared no content column at all, because then there is nothing better and refusing would leave every mark unanchored.
+
+## Marks stay inside the content
+
+You cannot draw in the margin. Drag out there and the mark's edge sticks at the content boundary.
+
+That is not a limitation being papered over — it is the only honest answer. A 1140px column has 294px of margin at 1728px and **none at 900px**, so a point 100px into the margin has nowhere to be on the narrower screen: it used to land 79px off the left edge, invisible. Space that does not exist at every width cannot hold a mark that has to appear at every width.
+
+It costs nothing in site knowledge. The frame is whatever the host marked with `data-annotation-frame`, so this is arithmetic — an app that wants its header annotatable simply marks a frame that includes the header.
+
+The live preview clamps too, which is what shows you that you have reached the edge.
+
 **Help it out:** put `data-annotation-id="something"` on the things worth pointing at. That is used in preference to a generated selector path and survives any amount of DOM churn around it.
 
 ---

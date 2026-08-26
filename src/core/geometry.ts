@@ -108,6 +108,50 @@ export function washFor(color: AnnotationColor): string {
   return toHex(rgb.map((c) => c + (255 - c) * WASH_LIGHTEN) as [number, number, number]);
 }
 
+/**
+ * How wide an element may be, as a share of the viewport, before it stops
+ * counting as an anchor.
+ */
+export const ANCHOR_MAX_STAGE_RATIO = 0.95;
+
+/**
+ * Is this element a ruler, or is it just the window?
+ *
+ * Measured on a real page: a mark drawn in the left margin anchored to
+ * `<main>`, which was 1728px wide — the full viewport. Anchoring to that
+ * measures the mark against the WINDOW, which is the exact ruler this package
+ * exists to avoid and which drifts 123px. A full-width wrapper is not content;
+ * it is the page, and the page is not a thing you can point at.
+ *
+ * The second condition matters: when the host declares no content column the
+ * frame IS the viewport, and there is nothing better to anchor to, so a
+ * viewport-wide element is allowed rather than leaving marks unanchored.
+ */
+export function isUsableAnchor(anchorWidth: number, frameWidth: number, stageWidth: number) {
+  if (stageWidth <= 0) return false;
+  const spansTheWindow = anchorWidth >= stageWidth * ANCHOR_MAX_STAGE_RATIO;
+  const frameIsNarrower = frameWidth < stageWidth * ANCHOR_MAX_STAGE_RATIO;
+  return !(spansTheWindow && frameIsNarrower);
+}
+
+/**
+ * Hold a point inside the frame.
+ *
+ * A mark in the margin is about space that does not exist at every width: a
+ * 1140px column has 294px margins at 1728px and none at all at 900px, so a
+ * point 100px into the margin lands 79px off the left edge of the narrower
+ * screen. There is no correct answer for it, so it is not allowed to happen.
+ *
+ * Site-agnostic on purpose. The frame is whatever the host marked with
+ * `data-annotation-frame`, so this is arithmetic rather than knowledge about
+ * any particular page — an app that wants its header annotatable simply marks
+ * a frame that includes the header.
+ */
+export const clampToFrame = (point: Point): Point => [
+  Math.min(1, Math.max(0, point[0])),
+  Math.min(1, Math.max(0, point[1])),
+];
+
 /** A stored fraction, projected into the stage coordinates the SVG draws in. */
 export const projectX = (fx: number, frame: Frame) => frame.left + fx * frame.width;
 export const projectY = (fy: number, frame: Frame) => frame.top + fy * frame.height;

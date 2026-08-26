@@ -28,7 +28,7 @@ async function load(entry) {
 const geometry = await load('src/core/geometry.ts');
 const types = await load('src/core/types.ts');
 
-const { projectX, projectY, toFraction, penPath, boxRect, arrowHead, strokeFor, washFor } =
+const { projectX, projectY, toFraction, penPath, boxRect, arrowHead, strokeFor, washFor, isUsableAnchor, clampToFrame } =
   geometry;
 const { isShape } = types;
 
@@ -172,6 +172,38 @@ driftsBadly ? (pass += 1) : (fail += 1);
   );
   missesBadly ? (pass += 1) : (fail += 1);
 }
+
+// -------------------------------------------------- marks outside content
+//
+// Measured on the real page: a mark drawn in the left margin anchored to
+// <main>, which was 1728px wide — the whole viewport. That silently swaps the
+// content column for the WINDOW, the ruler this package exists to avoid.
+check(
+  'an element as wide as the window is not an anchor',
+  isUsableAnchor(1728, 1140, 1728),
+  false
+);
+check('a content-sized element is an anchor', isUsableAnchor(1066, 1140, 1728), true);
+check(
+  'the column itself is still an anchor',
+  isUsableAnchor(1140, 1140, 1728),
+  true
+);
+// When the host declares no content column there is nothing better to measure
+// against, so a viewport-wide element has to be allowed or nothing anchors.
+check(
+  'with no content column declared, a full-width element is allowed',
+  isUsableAnchor(1728, 1728, 1728),
+  true
+);
+check('a zero-width stage anchors nothing', isUsableAnchor(100, 100, 0), false);
+
+// The margin does not exist at every width — a 1140px column has 294px of it
+// at 1728px and none at 900px — so a point out there is held inside the frame.
+check('a point left of the content is pulled to its edge', clampToFrame([-0.09, 0.4]), [0, 0.4]);
+check('a point right of the content is pulled to its edge', clampToFrame([1.3, 0.4]), [1, 0.4]);
+check('a point above the content is pulled down to it', clampToFrame([0.5, -0.2]), [0.5, 0]);
+check('a point inside the content is left alone', clampToFrame([0.42, 0.67]), [0.42, 0.67]);
 
 // ----------------------------------------------------------------- colour
 check('a named colour resolves to its palette hex', strokeFor('red'), '#d9100d');

@@ -1,9 +1,11 @@
 import {
   arrowHead,
   boxRect,
+  clampToFrame,
   type Frame,
   LIVE_RELAY_MS,
   MIN_POINT_DELTA,
+  isUsableAnchor,
   MIN_TRAVEL,
   penPath,
   projectX,
@@ -177,6 +179,12 @@ export function createSurface(options: SurfaceOptions) {
     if (rect.width === 0 || rect.height === 0) return null;
 
     const stageRect = stage.getBoundingClientRect();
+
+    // A full-width wrapper is the window wearing a disguise. Refusing it here
+    // rather than at capture means an anchor recorded before this check — or
+    // one that has since grown to fill the viewport — is refused too.
+    if (!isUsableAnchor(rect.width, frame.width, stageRect.width)) return null;
+
     return {
       left: rect.left - stageRect.left,
       top: rect.top - stageRect.top,
@@ -355,7 +363,11 @@ export function createSurface(options: SurfaceOptions) {
   function pointFrom(event: PointerEvent): Point | null {
     // Read the frame live rather than trusting the cached measurement, so a
     // mark started during a layout change still lands where it was aimed.
-    return toFraction(event.clientX, event.clientY, frameElement().getBoundingClientRect());
+    const point = toFraction(event.clientX, event.clientY, frameElement().getBoundingClientRect());
+    // Held inside the content, so a mark can never be about margin that does
+    // not exist at another width. The live preview clamps too, which is what
+    // shows the presenter they have reached the edge.
+    return point && clampToFrame(point);
   }
 
   function onPointerDown(event: PointerEvent) {
