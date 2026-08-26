@@ -11,17 +11,26 @@ import { build } from 'esbuild';
  * than just written down in a comment.
  */
 
-const bundle = await build({
-  entryPoints: ['src/core/geometry.ts'],
-  bundle: true,
-  format: 'esm',
-  write: false,
-  platform: 'neutral',
-});
-const geometry = await import(
-  `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
-);
-const { projectX, projectY, toFraction, penPath, boxRect, arrowHead } = geometry;
+/** Compile a core module and import it, so the test runs against real source. */
+async function load(entry) {
+  const bundle = await build({
+    entryPoints: [entry],
+    bundle: true,
+    format: 'esm',
+    write: false,
+    platform: 'neutral',
+  });
+  return import(
+    `data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
+  );
+}
+
+const geometry = await load('src/core/geometry.ts');
+const types = await load('src/core/types.ts');
+
+const { projectX, projectY, toFraction, penPath, boxRect, arrowHead, strokeFor, washFor } =
+  geometry;
+const { isShape } = types;
 
 let pass = 0;
 let fail = 0;
@@ -163,6 +172,43 @@ driftsBadly ? (pass += 1) : (fail += 1);
   );
   missesBadly ? (pass += 1) : (fail += 1);
 }
+
+// ----------------------------------------------------------------- colour
+check('a named colour resolves to its palette hex', strokeFor('red'), '#d9100d');
+check('a picked colour is used as-is', strokeFor('#7c3aed'), '#7c3aed');
+check('short hex is accepted', strokeFor('#abc'), '#abc');
+check('a colour we do not recognise falls back rather than rendering nothing', strokeFor('nonsense'), '#b97e1e');
+
+// The highlighter lays down a pale tint. A picked colour has no hand-tuned one,
+// so it is mixed toward white — without this the highlighter would bury the
+// text it is meant to be drawing attention to.
+check('a named colour keeps its hand-tuned wash', washFor('amber'), '#ffeccc');
+{
+  const wash = washFor('#7c3aed');
+  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(wash.slice(i, i + 2), 16));
+  const lighterThanSource = r > 0x7c && g > 0x3a && b > 0xed - 1;
+  console.log(
+    `${lighterThanSource ? 'PASS' : 'FAIL'}  a picked colour gets a pale wash derived from it — ${wash}`
+  );
+  lighterThanSource ? (pass += 1) : (fail += 1);
+}
+
+// The colour reaches an SVG stroke attribute, so it is validated rather than
+// trusted. Nothing there executes, but an unchecked string can carry a url(#…)
+// reference, and a nonsense colour renders as a line the drawer cannot see.
+const colorShape = (color) => ({
+  id: 'c',
+  scope: 's',
+  tool: 'arrow',
+  color,
+  points: [[0.1, 0.1]],
+  at: 1,
+  by: 'x',
+});
+check('a picked colour is a valid mark', isShape(colorShape('#7c3aed')), true);
+check('a named colour is a valid mark', isShape(colorShape('brand')), true);
+check('an arbitrary string is not a colour', isShape(colorShape('url(#evil)')), false);
+check('a colour-shaped lie is rejected', isShape(colorShape('#nothex')), false);
 
 // ------------------------------------------------------------- rendering
 check('empty pen path is empty', penPath([], wide), '');

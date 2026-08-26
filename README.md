@@ -5,7 +5,7 @@ Draw over a page while you present it, and everyone watching sees the marks appe
 Extracted from the annotation layer built for `pod-workflow-introduction`, made framework-free so it works in a React app **or** on any page via one script tag.
 
 ```
-arrow · box · pen · highlight        amber · red · blue        undo · clear
+arrow · box · pen · highlight    amber · red · blue · any    undo · clear
 ```
 
 ---
@@ -206,10 +206,29 @@ The embed follows client-side route changes, so marks stay tied to the view they
 | `V` | Pointer — page stays usable |
 | `A` `B` `P` `H` | Arrow, box, pen, highlight |
 | `1` `2` `3` | Amber, red, blue |
+| `4` | Open the colour picker |
 | `U` / `C` | Undo your last mark / clear this page |
 | `Esc` | Back to pointer |
 
 Ignored while you are typing in an input, so "a box" in a search field does not silently arm two tools.
+
+---
+
+## Colours
+
+Three named ones, because they carry meaning and a name survives the palette being retuned:
+
+| | |
+| --- | --- |
+| **Amber** `#b97e1e` | look here |
+| **Red** `#d9100d` | a problem |
+| **Blue** `#0086e7` | a step |
+
+Plus a fourth swatch for anything else. It shows an empty rainbow ring until you use it, then becomes the colour you chose. It is a native `<input type="color">`, so it opens your operating system's own picker — eyedropper and recents included — rather than a hand-built panel that would need styling against a page the package has never seen.
+
+A picked colour travels as its hex. The highlighter has hand-tuned pale tints for the three named colours; a picked one is mixed 72% toward white to get its wash, because laying down the full saturated colour would bury the text it is meant to be drawing attention to.
+
+Colours are validated on the way in — named, or `#rgb` / `#rrggbb`. The value reaches an SVG `stroke` attribute, and while nothing there executes, an unchecked string can carry a `url(#…)` reference, and a nonsense colour renders as a line the drawer cannot see or explain.
 
 ---
 

@@ -1,4 +1,4 @@
-import type { AnnotationColor, Point } from './types';
+import { type AnnotationColor, isNamedColor, type NamedColor, type Point } from './types';
 
 /**
  * The coordinate system, which is the part of this package worth keeping.
@@ -54,17 +54,59 @@ export const MIN_POINT_DELTA = 0.004;
 /** A drag shorter than this is a misfire, not a zero-length arrow. */
 export const MIN_TRAVEL = 0.01;
 
-export const STROKE: Record<AnnotationColor, string> = {
+export const STROKE: Record<NamedColor, string> = {
   amber: '#b97e1e',
   red: '#d9100d',
   brand: '#0086e7',
 };
 
-export const WASH: Record<AnnotationColor, string> = {
+/** The pale tint the highlighter lays down. Hand-picked for the three names. */
+export const WASH: Record<NamedColor, string> = {
   amber: '#ffeccc',
   red: '#ffb4b5',
   brand: '#d7ecfd',
 };
+
+/** How far a picked colour is mixed toward white to become a highlighter wash. */
+const WASH_LIGHTEN = 0.72;
+
+function parseHex(hex: string): [number, number, number] | null {
+  const value = hex.slice(1);
+  const full =
+    value.length === 3
+      ? value
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : value;
+  if (full.length !== 6) return null;
+  const n = Number.parseInt(full, 16);
+  if (Number.isNaN(n)) return null;
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+const toHex = (rgb: [number, number, number]) =>
+  `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`;
+
+/** The line colour for a mark, named or picked. */
+export function strokeFor(color: AnnotationColor): string {
+  if (isNamedColor(color)) return STROKE[color];
+  return parseHex(color) ? color : STROKE.amber;
+}
+
+/**
+ * The highlighter's wash for a mark.
+ *
+ * The three named colours have hand-tuned tints. A picked colour is mixed
+ * toward white instead — without this the highlighter would lay down the full
+ * saturated colour and bury the text it is supposed to be drawing attention to.
+ */
+export function washFor(color: AnnotationColor): string {
+  if (isNamedColor(color)) return WASH[color];
+  const rgb = parseHex(color);
+  if (!rgb) return WASH.amber;
+  return toHex(rgb.map((c) => c + (255 - c) * WASH_LIGHTEN) as [number, number, number]);
+}
 
 /** A stored fraction, projected into the stage coordinates the SVG draws in. */
 export const projectX = (fx: number, frame: Frame) => frame.left + fx * frame.width;

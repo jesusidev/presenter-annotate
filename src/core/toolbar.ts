@@ -1,5 +1,5 @@
 import { STROKE } from './geometry';
-import type { AnnotationColor, AnnotationTool } from './types';
+import { type AnnotationColor, type AnnotationTool, isColor, type NamedColor } from './types';
 
 /**
  * The presenter's controls, with no UI-kit dependency.
@@ -32,11 +32,14 @@ const TOOLS: { tool: AnnotationTool; key: string; label: string }[] = [
   { tool: 'highlight', key: 'h', label: 'Highlight (H)' },
 ];
 
-const COLORS: { color: AnnotationColor; key: string; label: string }[] = [
+const COLORS: { color: NamedColor; key: string; label: string }[] = [
   { color: 'amber', key: '1', label: 'Amber — look here (1)' },
   { color: 'red', key: '2', label: 'Red — a problem (2)' },
   { color: 'brand', key: '3', label: 'Blue — a step (3)' },
 ];
+
+/** Where the picker starts before anyone has chosen anything. */
+const CUSTOM_SEED = '#7c3aed';
 
 export type ToolbarOptions = {
   mount: HTMLElement;
@@ -106,6 +109,47 @@ export function createToolbar(options: ToolbarOptions) {
     colorButtons.set(entry.color, button);
   }
 
+  /**
+   * Anything else.
+   *
+   * A native `<input type="color">` rather than a hand-built picker: it is one
+   * element, it opens the operating system's own colour panel with eyedropper
+   * and recents already in it, and it needs no styling to work on a page whose
+   * CSS we have never seen.
+   *
+   * It reads as an empty rainbow ring until it is used, so it looks like an
+   * invitation rather than a fourth colour that happens to be black — which is
+   * what the input's default value would otherwise show.
+   */
+  const custom = document.createElement('input');
+  custom.type = 'color';
+  custom.className = 'pa-swatch pa-swatch-custom';
+  custom.value = CUSTOM_SEED;
+  custom.title = 'Any colour — opens the picker (4)';
+  custom.setAttribute('aria-label', 'Pick a custom colour');
+  custom.setAttribute('data-picked', 'false');
+
+  /** True once the presenter has actually chosen something. */
+  let picked = false;
+
+  const useCustom = () => {
+    picked = true;
+    custom.setAttribute('data-picked', 'true');
+    // The input's own value is the swatch, so nothing else needs painting.
+    if (isColor(custom.value)) setColor(custom.value);
+  };
+
+  // `input` fires live as the picker is dragged, so the colour follows the
+  // presenter's hand rather than waiting for them to dismiss the panel.
+  custom.addEventListener('input', useCustom);
+  // A click on an already-chosen swatch should re-select that colour even if
+  // the picker is then dismissed without changing anything.
+  custom.addEventListener('click', () => {
+    if (picked) useCustom();
+  });
+
+  bar.appendChild(custom);
+
   divider();
 
   const undo = document.createElement('button');
@@ -133,6 +177,9 @@ export function createToolbar(options: ToolbarOptions) {
     for (const [key, button] of colorButtons) {
       button.setAttribute('data-active', String(key === color));
     }
+    // Active whenever the live colour is the picked one — which also means
+    // choosing a named colour visibly releases the custom swatch.
+    custom.setAttribute('data-active', String(picked && color === custom.value));
   }
 
   function setTool(next: AnnotationTool) {
@@ -169,6 +216,9 @@ export function createToolbar(options: ToolbarOptions) {
     if (toolMatch) return setTool(toolMatch.tool);
     const colorMatch = COLORS.find((c) => c.key === key);
     if (colorMatch) return setColor(colorMatch.color);
+    // Opening the picker is the only thing "4" can usefully do — there is no
+    // API to open it programmatically other than clicking the input.
+    if (key === '4') return custom.click();
     if (key === 'u') return options.onUndo();
     if (key === 'c') return options.onClear();
   }

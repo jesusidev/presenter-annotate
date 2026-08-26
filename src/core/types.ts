@@ -12,7 +12,37 @@ export type AnnotationTool = 'off' | 'arrow' | 'box' | 'pen' | 'highlight';
 export type DrawTool = Exclude<AnnotationTool, 'off'>;
 
 /** Amber first because it is the "look here" colour in the Meridian palette. */
-export type AnnotationColor = 'amber' | 'red' | 'brand';
+export type NamedColor = 'amber' | 'red' | 'brand';
+
+/** Anything the presenter picked out of the colour picker. */
+export type CustomColor = `#${string}`;
+
+/**
+ * A mark's colour: one of the three named ones, or a picked hex.
+ *
+ * Named rather than always-hex because the three defaults carry meaning — amber
+ * is "look here", red is "a problem", blue is "a step" — and a name survives a
+ * palette being retuned, which a baked-in hex would not.
+ */
+export type AnnotationColor = NamedColor | CustomColor;
+
+const NAMED: readonly string[] = ['amber', 'red', 'brand'];
+const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/**
+ * A colour we are willing to render.
+ *
+ * Worth being strict about: this value goes straight into an SVG `stroke`
+ * attribute. Nothing there executes, but an unchecked string could carry a
+ * `url(#…)` reference at a definition of someone else's choosing, and a mark
+ * whose colour is nonsense renders as an invisible line the drawer cannot see
+ * or explain.
+ */
+export function isColor(value: unknown): value is AnnotationColor {
+  return typeof value === 'string' && (NAMED.includes(value) || HEX.test(value));
+}
+
+export const isNamedColor = (value: string): value is NamedColor => NAMED.includes(value);
 
 /** `[x, y]`, each 0–1, relative to the frame. Never pixels. See geometry.ts. */
 export type Point = [number, number];
@@ -154,7 +184,7 @@ export function isShape(value: unknown): value is AnnotationShape {
   return (
     typeof s.id === 'string' &&
     typeof s.scope === 'string' &&
-    typeof s.color === 'string' &&
+    isColor(s.color) &&
     (s.tool === 'arrow' || s.tool === 'box' || s.tool === 'pen' || s.tool === 'highlight') &&
     isPointList(s.points) &&
     isValidAnchor(s.anchor)

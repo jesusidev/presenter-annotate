@@ -8,9 +8,9 @@ import {
   penPath,
   projectX,
   projectY,
-  STROKE,
+  strokeFor,
   toFraction,
-  WASH,
+  washFor,
 } from './geometry';
 import { type AnnotationState, type Store, visibleLive, visibleShapes } from './store';
 import {
@@ -250,7 +250,7 @@ export function createSurface(options: SurfaceOptions) {
     g.setAttribute('data-shape', shape.id);
     if (live) g.setAttribute('opacity', '0.85');
 
-    const stroke = STROKE[shape.color] ?? STROKE.amber;
+    const stroke = strokeFor(shape.color);
 
     /**
      * Anchor first, frame second.
@@ -317,7 +317,7 @@ export function createSurface(options: SurfaceOptions) {
         const path = document.createElementNS(SVG_NS, 'path');
         path.setAttribute('d', d);
         path.setAttribute('fill', 'none');
-        path.setAttribute('stroke', WASH[shape.color] ?? WASH.amber);
+        path.setAttribute('stroke', washFor(shape.color));
         path.setAttribute('stroke-width', '20');
         path.setAttribute('stroke-linecap', 'butt');
         path.setAttribute('opacity', '0.55');

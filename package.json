@@ -1,6 +1,6 @@
 {
   "name": "presenter-annotate",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Shared annotation over any page you are presenting — draw, everyone sees it. React component or one script tag.",
   "type": "module",

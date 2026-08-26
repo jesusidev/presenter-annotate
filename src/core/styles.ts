@@ -85,6 +85,25 @@ export const STYLES = `
   transform: scale(1.12);
 }
 
+/* The custom-colour input, reset to look like the swatches beside it. A colour
+   input renders its value through a shadow part, so the roundness and the
+   border have to be set on that part rather than on the input. */
+.pa-swatch-custom {
+  -webkit-appearance: none;
+  appearance: none;
+  overflow: hidden;
+  /* An empty rainbow ring, so an untouched swatch reads as "pick anything"
+     instead of as a fourth colour that happens to be the input's default. */
+  background: conic-gradient(#d9100d, #b97e1e, #2fb344, #0086e7, #7c3aed, #d9100d);
+}
+.pa-swatch-custom::-webkit-color-swatch-wrapper { padding: 0; }
+.pa-swatch-custom::-webkit-color-swatch { border: none; border-radius: 50%; }
+.pa-swatch-custom::-moz-color-swatch { border: none; border-radius: 50%; }
+
+/* Until it is used, let the rainbow show through instead of the value. */
+.pa-swatch-custom[data-picked='false']::-webkit-color-swatch { opacity: 0; }
+.pa-swatch-custom[data-picked='false']::-moz-color-swatch { opacity: 0; }
+
 .pa-divider {
   width: 1px;
   height: 20px;
