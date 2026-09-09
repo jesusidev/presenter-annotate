@@ -224,9 +224,11 @@ export function createToolbar(options: ToolbarOptions) {
   /**
    * What is left on screen once the bar is hidden.
    *
-   * A pencil, not a chevron or a dot, because it has to say what it does to
-   * someone seeing the page for the first time — including the viewers, who
-   * never had a toolbar and should not wonder what the floating button is.
+   * A pencil, not a chevron or a dot, because after twenty minutes of not
+   * drawing it has to still say what it does — a lone chevron on a page reads
+   * as "expand something", which is not the same promise.
+   *
+   * It only exists where the toolbar does, so a viewer sees neither.
    *
    * It sits at the same position as the bar, so hiding and showing does not
    * move the control across the screen.
