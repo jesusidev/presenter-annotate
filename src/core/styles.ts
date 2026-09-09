@@ -26,26 +26,105 @@ export const STYLES = `
   cursor: crosshair;
 }
 
-.pa-toolbar {
+.pa-toolbar,
+.pa-launcher {
   position: fixed;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 2147483001;
-  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px;
   border-radius: 11px;
   border: 1px solid rgba(48, 58, 82, 0.14);
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(8px);
   box-shadow: 0 6px 22px rgba(16, 24, 40, 0.16);
   font-family: system-ui, -apple-system, sans-serif;
+  color: #303a52;
 }
 
+.pa-toolbar {
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+}
+
+/* Hidden and shown by the same attribute, so the pair can never both be up. */
+.pa-toolbar[data-minimized='true'] { display: none; }
+
+/**
+ * The pencil left behind when the bar is hidden.
+ *
+ * Deliberately the same shell as the toolbar — same border, blur and shadow —
+ * so it reads as the toolbar folded up rather than as some other widget the
+ * page has grown.
+ */
+.pa-launcher {
+  display: none;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.pa-launcher[data-minimized='true'] { display: inline-flex; }
+.pa-launcher:hover {
+  transform: scale(1.08);
+  box-shadow: 0 8px 26px rgba(16, 24, 40, 0.22);
+}
+
+/**
+ * Placement.
+ *
+ * Every position is written out for both elements rather than composed from
+ * edge and axis rules, because the two side positions also need the bar to
+ * stack vertically and a partial rule set would put a horizontal bar half off
+ * the left edge of the screen.
+ */
+.pa-toolbar[data-position='top-left'],
+.pa-launcher[data-position='top-left'] { top: 18px; left: 18px; }
+
+.pa-toolbar[data-position='top-center'],
+.pa-launcher[data-position='top-center'] { top: 18px; left: 50%; transform: translateX(-50%); }
+
+.pa-toolbar[data-position='top-right'],
+.pa-launcher[data-position='top-right'] { top: 18px; right: 18px; }
+
+.pa-toolbar[data-position='left-center'],
+.pa-launcher[data-position='left-center'] { left: 18px; top: 50%; transform: translateY(-50%); }
+
+.pa-toolbar[data-position='right-center'],
+.pa-launcher[data-position='right-center'] { right: 18px; top: 50%; transform: translateY(-50%); }
+
+.pa-toolbar[data-position='bottom-left'],
+.pa-launcher[data-position='bottom-left'] { bottom: 18px; left: 18px; }
+
+.pa-toolbar[data-position='bottom-center'],
+.pa-launcher[data-position='bottom-center'] { bottom: 18px; left: 50%; transform: translateX(-50%); }
+
+.pa-toolbar[data-position='bottom-right'],
+.pa-launcher[data-position='bottom-right'] { bottom: 18px; right: 18px; }
+
+/* On an edge rather than a corner, the bar runs down the screen. */
+.pa-toolbar[data-position='left-center'],
+.pa-toolbar[data-position='right-center'] { flex-direction: column; }
+
+.pa-toolbar[data-position='left-center'] .pa-divider,
+.pa-toolbar[data-position='right-center'] .pa-divider {
+  width: 20px;
+  height: 1px;
+  margin: 3px 0;
+}
+
+/* Hover on the launcher already uses transform, so the centred positions have
+   to reapply their own or the button jumps to the edge as the mouse arrives. */
+.pa-launcher[data-position='top-center']:hover,
+.pa-launcher[data-position='bottom-center']:hover { transform: translateX(-50%) scale(1.08); }
+.pa-launcher[data-position='left-center']:hover,
+.pa-launcher[data-position='right-center']:hover { transform: translateY(-50%) scale(1.08); }
+
 @media (prefers-color-scheme: dark) {
-  .pa-toolbar {
+  .pa-toolbar,
+  .pa-launcher {
     border-color: rgba(255, 255, 255, 0.12);
     background: rgba(28, 32, 44, 0.94);
     color: #e8eaf0;

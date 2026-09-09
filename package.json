@@ -1,6 +1,6 @@
 {
   "name": "presenter-annotate",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Shared annotation over any page you are presenting — draw, everyone sees it. React component or one script tag.",
   "type": "module",
@@ -29,7 +29,7 @@
     "build": "node scripts/build.mjs",
     "prepare": "node scripts/build.mjs",
     "type-check": "tsc --noEmit",
-    "test": "node scripts/relay-test.mjs && node scripts/geometry-test.mjs",
+    "test": "node scripts/relay-test.mjs && node scripts/geometry-test.mjs && node scripts/toolbar-test.mjs",
     "serve": "node bin/cli.mjs serve"
   },
   "peerDependencies": {

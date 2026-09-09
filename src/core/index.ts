@@ -1,7 +1,7 @@
 import { createStore, lastDrawnBy, type Store } from './store';
 import { injectStyles } from './styles';
 import { createSurface, type Surface } from './surface';
-import { createToolbar, type Toolbar } from './toolbar';
+import { createToolbar, type Toolbar, type ToolbarPosition } from './toolbar';
 import {
   type AnnotationColor,
   type AnnotationTool,
@@ -28,6 +28,13 @@ export type AnnotatorOptions = {
   canDraw?: boolean;
   /** Whether to render the presenter toolbar. Defaults to `canDraw`. */
   toolbar?: boolean;
+  /**
+   * Which edge or corner the toolbar sits on, and where its pencil sits once
+   * hidden. Defaults to bottom-center.
+   */
+  toolbarPosition?: ToolbarPosition;
+  /** Start with the toolbar collapsed to the pencil. */
+  toolbarMinimized?: boolean;
   /** Identifies this client's own marks, so undo removes yours and not theirs. */
   by?: string;
 };
@@ -90,6 +97,8 @@ export function createAnnotator(options: AnnotatorOptions) {
       onColor: (color) => surface.setColor(color),
       onUndo: undo,
       onClear: clear,
+      position: options.toolbarPosition,
+      minimized: options.toolbarMinimized,
     });
   }
 
@@ -112,6 +121,14 @@ export function createAnnotator(options: AnnotatorOptions) {
     setColor(color: AnnotationColor) {
       surface.setColor(color);
       toolbar?.setColor(color);
+    },
+    /** Move the toolbar without rebuilding it, so marks stay on screen. */
+    setToolbarPosition(next: ToolbarPosition) {
+      toolbar?.setPosition(next);
+    },
+    /** Collapse to the pencil, or open back up. Disarms on the way down. */
+    setToolbarMinimized(next: boolean) {
+      toolbar?.setMinimized(next);
     },
     undo,
     clear,

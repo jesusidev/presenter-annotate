@@ -5,7 +5,7 @@ Draw over a page while you present it, and everyone watching sees the marks appe
 Extracted from the annotation layer built for `pod-workflow-introduction`, made framework-free so it works in a React app **or** on any page via one script tag.
 
 ```
-arrow · box · pen · highlight    amber · red · blue · any    undo · clear
+arrow · box · pen · highlight    amber · red · blue · any    undo · clear · hide
 ```
 
 ---
@@ -121,7 +121,7 @@ Working on the package itself:
 git clone git@github.com:jesusidev/presenter-annotate.git
 cd presenter-annotate
 npm install          # runs the build via `prepare`
-npm test             # relay (10) + geometry (13)
+npm test             # relay (10) + geometry (38) + toolbar (52)
 npm run type-check
 ```
 
@@ -167,6 +167,22 @@ Open the page with `?present` to draw. Everyone else opens it normally and watch
 
 Without it the whole wrapper is the ruler — correct, but it drifts when the window is much wider than the content.
 
+### Where the toolbar sits, and getting it out of the way
+
+The bar defaults to bottom-center. Move it, or start it folded up:
+
+```tsx
+<PresenterAnnotate toolbarPosition="top-right" toolbarMinimized />
+```
+
+Eight positions: `top-left`, `top-center`, `top-right`, `left-center`, `right-center`, `bottom-left`, `bottom-center`, `bottom-right`. On the two side edges the bar stacks vertically instead of running off the screen.
+
+The bar's own **minimize button** collapses it to a floating pencil at the same position, and the pencil opens it again. `M` toggles it from the keyboard.
+
+Hiding the bar also **puts the tool back to pointer**, which is not tidiness. An armed overlay captures pointer events across the whole stage, so a hidden toolbar with the box tool still live would be a page that has silently stopped responding to clicks — with the only clue, the highlighted tool button, now off the screen. For the same reason, a tool shortcut pressed while hidden opens the bar first rather than arming something invisible. Reopening restores whatever tool you were using.
+
+Both props can change after mount: the toolbar moves without a rebuild, so nothing on screen blinks. `toolbarMinimized` is applied whenever the prop *changes*, which makes it usable as a control from a button of your own without fighting the presenter's own clicks.
+
 ### Wiring it to a socket you already have
 
 An app with its own authenticated socket should **not** use the bundled transport — it would open a second, unprotected connection beside the one it already trusts. Implement `Transport` against the existing one:
@@ -204,6 +220,10 @@ Viewers load the same page **without** `data-present`.
 | `data-url="ws://…"` | A relay other than the one that served the script |
 | `data-scope="id"` | Tie marks to something other than the pathname |
 | `data-frame="main"` | CSS selector for the content column ruler |
+| `data-position="top-right"` | Where the toolbar and its pencil sit. Default `bottom-center` |
+| `data-minimized` | Start folded up as the pencil |
+
+A `data-position` that is not one of the eight falls back to the default and says so in the console — an unmatched attribute selector would otherwise leave the bar unpositioned in the corner of the viewport, which looks like a broken package rather than a typo in a script tag.
 
 With no `data-frame`, it guesses: `[data-annotation-frame]`, then `main`, then `#root` / `#__next` / `#app`, then `body`. Guessing wrong does not break anything — marks stay consistent between browsers at the same width; they just drift when two people have very different windows.
 
@@ -220,6 +240,7 @@ The embed follows client-side route changes, so marks stay tied to the view they
 | `1` `2` `3` | Amber, red, blue |
 | `4` | Open the colour picker |
 | `U` / `C` | Undo your last mark / clear this page |
+| `M` | Hide the toolbar, or bring it back |
 | `Esc` | Back to pointer |
 
 Ignored while you are typing in an input, so "a box" in a search field does not silently arm two tools.
@@ -286,7 +307,7 @@ Re-measured with a `ResizeObserver` on both, plus on `document.fonts.ready`, bec
 ```bash
 npm run type-check   # tsc --noEmit
 npm run build        # esbuild → dist/
-npm test             # relay (10) + geometry (13)
+npm test             # relay (10) + geometry (38) + toolbar (52)
 ```
 
 The relay test drives **real websocket clients through a real relay** — a mark drawn by one arriving at another, a late joiner being caught up, a half-finished stroke not being stored, rooms staying isolated. Those are protocol behaviours, so a unit test would not have proven them.
@@ -321,4 +342,4 @@ Both browsers need the same relay *and* the same room. Check the relay terminal 
 - **An anchor is a generated selector path** when the host app does not supply `data-annotation-id`. It survives a reflow, and it does not survive the page rendering a structurally different tree — a component that swaps its markup at a breakpoint can move the anchor. The mark then falls back to the column, which is where it would have been anyway.
 - **Live strokes are not anchored.** Only the finished mark is, because only a finished mark knows its own extent. A stroke in flight is positioned by the column, so it can appear slightly off on a much narrower viewer until the pointer is released.
 - **Undo is scoped, not per-person.** The relay has no identity, so it removes the newest mark in the scope. The client resolves "your last mark" locally, but two people drawing at once can undo each other's.
-- **The toolbar is fixed bottom-centre** with no way to move it.
+- **Position is a prop, not a drag.** Eight placements, chosen by the host — the presenter can hide the bar but cannot move it mid-session. Dragging would need a persisted position, and nothing here persists anything yet.

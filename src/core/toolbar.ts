@@ -22,7 +22,39 @@ const ICONS: Record<string, string> = {
   highlight: 'M4 19h16M6 15l6-9 5 3-6 9z',
   undo: 'M9 14L4 9l5-5M4 9h9a7 7 0 010 14H8',
   clear: 'M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13',
+  // A minus rather than a chevron: the bar can sit on any edge, and a chevron
+  // pointing the wrong way is worse than one that points nowhere.
+  minimize: 'M6 12h12',
 };
+
+/**
+ * Where the bar sits, and where the pencil sits once it is hidden.
+ *
+ * Fixed to the viewport rather than to the stage, because the toolbar belongs
+ * to the presenter's screen and not to the content being annotated — it should
+ * not scroll away mid-sentence.
+ *
+ * Exported as a list, not just a union, so the host can offer a picker and the
+ * test can assert every one of them actually has CSS.
+ */
+export const TOOLBAR_POSITIONS = [
+  'top-left',
+  'top-center',
+  'top-right',
+  'left-center',
+  'right-center',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right',
+] as const;
+
+export type ToolbarPosition = (typeof TOOLBAR_POSITIONS)[number];
+
+export const DEFAULT_POSITION: ToolbarPosition = 'bottom-center';
+
+export function isToolbarPosition(value: unknown): value is ToolbarPosition {
+  return typeof value === 'string' && (TOOLBAR_POSITIONS as readonly string[]).includes(value);
+}
 
 const TOOLS: { tool: AnnotationTool; key: string; label: string }[] = [
   { tool: 'off', key: 'v', label: 'Pointer — page stays usable (V)' },
@@ -47,6 +79,12 @@ export type ToolbarOptions = {
   onColor(color: AnnotationColor): void;
   onUndo(): void;
   onClear(): void;
+  /** Which edge or corner the bar sits on. Defaults to bottom-center. */
+  position?: ToolbarPosition;
+  /** Start collapsed to the pencil. */
+  minimized?: boolean;
+  /** Told whenever the presenter hides or shows the bar. */
+  onMinimizedChange?(minimized: boolean): void;
 };
 
 function icon(path: string): SVGSVGElement {
@@ -68,6 +106,8 @@ function icon(path: string): SVGSVGElement {
 export function createToolbar(options: ToolbarOptions) {
   let tool: AnnotationTool = 'off';
   let color: AnnotationColor = 'amber';
+  let position: ToolbarPosition = options.position ?? DEFAULT_POSITION;
+  let minimized = options.minimized ?? false;
 
   const bar = document.createElement('div');
   bar.className = 'pa-toolbar';
@@ -170,6 +210,35 @@ export function createToolbar(options: ToolbarOptions) {
   clear.addEventListener('click', () => options.onClear());
   bar.appendChild(clear);
 
+  divider();
+
+  const hide = document.createElement('button');
+  hide.type = 'button';
+  hide.className = 'pa-tool';
+  hide.title = 'Hide the toolbar (M)';
+  hide.setAttribute('aria-label', 'Hide the toolbar');
+  hide.appendChild(icon(ICONS.minimize as string));
+  hide.addEventListener('click', () => setMinimized(true));
+  bar.appendChild(hide);
+
+  /**
+   * What is left on screen once the bar is hidden.
+   *
+   * A pencil, not a chevron or a dot, because it has to say what it does to
+   * someone seeing the page for the first time — including the viewers, who
+   * never had a toolbar and should not wonder what the floating button is.
+   *
+   * It sits at the same position as the bar, so hiding and showing does not
+   * move the control across the screen.
+   */
+  const launcher = document.createElement('button');
+  launcher.type = 'button';
+  launcher.className = 'pa-launcher';
+  launcher.title = 'Annotation tools (M)';
+  launcher.setAttribute('aria-label', 'Show the annotation toolbar');
+  launcher.appendChild(icon(ICONS.pen as string));
+  launcher.addEventListener('click', () => setMinimized(false));
+
   function paint() {
     for (const [key, button] of toolButtons) {
       button.setAttribute('data-active', String(key === tool));
@@ -180,6 +249,46 @@ export function createToolbar(options: ToolbarOptions) {
     // Active whenever the live colour is the picked one — which also means
     // choosing a named colour visibly releases the custom swatch.
     custom.setAttribute('data-active', String(picked && color === custom.value));
+
+    for (const element of [bar, launcher]) {
+      element.setAttribute('data-position', position);
+      element.setAttribute('data-minimized', String(minimized));
+    }
+  }
+
+  /**
+   * The tool that was armed when the bar was hidden, so showing it again picks
+   * up mid-thought rather than dropping the presenter back to the pointer.
+   */
+  let toolBeforeMinimize: AnnotationTool = 'off';
+
+  /**
+   * Hiding the bar DISARMS the surface, and that is not tidiness.
+   *
+   * An armed overlay is `pointer-events: auto` across the whole stage. Hide the
+   * toolbar while the box tool is live and the page silently stops responding
+   * to clicks, with the only visible explanation — the highlighted tool button
+   * — now removed from the screen. Whoever hit the button would have no way to
+   * connect the two.
+   */
+  function setMinimized(next: boolean) {
+    if (next === minimized) return;
+    minimized = next;
+
+    if (next) {
+      toolBeforeMinimize = tool;
+      setTool('off');
+    } else if (toolBeforeMinimize !== 'off') {
+      setTool(toolBeforeMinimize);
+    }
+
+    paint();
+    options.onMinimizedChange?.(next);
+  }
+
+  function setPosition(next: ToolbarPosition) {
+    position = next;
+    paint();
   }
 
   function setTool(next: AnnotationTool) {
@@ -211,10 +320,25 @@ export function createToolbar(options: ToolbarOptions) {
     }
 
     const key = event.key.toLowerCase();
+    if (key === 'm') return setMinimized(!minimized);
     if (key === 'escape') return setTool('off');
+
     const toolMatch = TOOLS.find((t) => t.key === key);
-    if (toolMatch) return setTool(toolMatch.tool);
     const colorMatch = COLORS.find((c) => c.key === key);
+
+    /**
+     * A shortcut while hidden shows the bar first.
+     *
+     * Arming a tool with no toolbar on screen is the same trap `setMinimized`
+     * guards against — an overlay swallowing clicks with nothing to explain it.
+     * Showing the bar is also what the presenter almost certainly meant: they
+     * reached for a tool.
+     */
+    if (minimized && (toolMatch || colorMatch || key === '4' || key === 'u' || key === 'c')) {
+      setMinimized(false);
+    }
+
+    if (toolMatch) return setTool(toolMatch.tool);
     if (colorMatch) return setColor(colorMatch.color);
     // Opening the picker is the only thing "4" can usefully do — there is no
     // API to open it programmatically other than clicking the input.
@@ -225,15 +349,21 @@ export function createToolbar(options: ToolbarOptions) {
 
   document.addEventListener('keydown', onKeyDown);
   options.mount.appendChild(bar);
+  options.mount.appendChild(launcher);
   paint();
 
   return {
     element: bar,
+    launcher,
     setTool,
     setColor,
+    setPosition,
+    setMinimized,
+    isMinimized: () => minimized,
     destroy() {
       document.removeEventListener('keydown', onKeyDown);
       bar.remove();
+      launcher.remove();
     },
   };
 }

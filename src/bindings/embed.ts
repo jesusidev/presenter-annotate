@@ -1,4 +1,5 @@
 import { createAnnotator } from '../core';
+import { isToolbarPosition, type ToolbarPosition } from '../core/toolbar';
 import { createWebSocketTransport } from '../core/transport';
 
 /**
@@ -15,6 +16,8 @@ import { createWebSocketTransport } from '../core/transport';
  *   data-url="ws://..."     a relay other than the one that served this file
  *   data-scope="id"         tie marks to something other than the pathname
  *   data-frame="main"       CSS selector for the content column ruler
+ *   data-position="top-right"  where the toolbar and its pencil sit
+ *   data-minimized          start collapsed to the pencil
  */
 
 type Config = {
@@ -23,6 +26,8 @@ type Config = {
   url: string;
   scope?: string;
   frame?: string;
+  position?: ToolbarPosition;
+  minimized: boolean;
 };
 
 function readConfig(): Config {
@@ -43,12 +48,27 @@ function readConfig(): Config {
     url = origin.toString();
   }
 
+  /**
+   * A misspelled position falls back to the default instead of leaving the bar
+   * unpositioned in the top-left corner of the viewport, which is what an
+   * unmatched attribute selector would do — and would look like a bug in the
+   * package rather than a typo in the script tag.
+   */
+  const position = isToolbarPosition(data.position) ? data.position : undefined;
+  if (data.position && !position) {
+    console.warn(
+      `[presenter-annotate] data-position="${data.position}" is not a position; using bottom-center.`
+    );
+  }
+
   return {
     present: data.present !== undefined,
     room: data.room,
     url: url ?? `ws://localhost:7420/annotate`,
     scope: data.scope,
     frame: data.frame,
+    position,
+    minimized: data.minimized !== undefined,
   };
 }
 
@@ -81,6 +101,8 @@ function start() {
     scope: config.scope ?? location.pathname,
     canDraw: config.present,
     toolbar: config.present,
+    toolbarPosition: config.position,
+    toolbarMinimized: config.minimized,
   });
 
   // Handy for the console, and for a host page that wants to drive it.

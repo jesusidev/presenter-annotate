@@ -11,6 +11,7 @@ import {
 import { type Annotator, createAnnotator } from '../core';
 import { createWebSocketTransport } from '../core/transport';
 import type { AnnotationState } from '../core/store';
+import type { ToolbarPosition } from '../core/toolbar';
 import type { Transport } from '../core/types';
 
 /**
@@ -32,6 +33,14 @@ export type AnnotationProviderProps = {
   scope?: string;
   canDraw?: boolean;
   toolbar?: boolean;
+  /**
+   * Which edge or corner the toolbar sits on: `'top-left'`, `'top-center'`,
+   * `'top-right'`, `'left-center'`, `'right-center'`, `'bottom-left'`,
+   * `'bottom-center'` (the default) or `'bottom-right'`.
+   */
+  toolbarPosition?: ToolbarPosition;
+  /** Start collapsed to a floating pencil, and collapse again whenever this changes. */
+  toolbarMinimized?: boolean;
   by?: string;
   className?: string;
 };
@@ -52,6 +61,8 @@ export function AnnotationProvider({
   scope,
   canDraw = false,
   toolbar,
+  toolbarPosition,
+  toolbarMinimized,
   by,
   className,
 }: AnnotationProviderProps) {
@@ -81,6 +92,8 @@ export function AnnotationProvider({
       scope,
       canDraw,
       toolbar,
+      toolbarPosition,
+      toolbarMinimized,
       by,
     });
     annotatorRef.current = annotator;
@@ -101,6 +114,24 @@ export function AnnotationProvider({
   useEffect(() => {
     annotatorRef.current?.setCanDraw(canDraw);
   }, [canDraw]);
+
+  useEffect(() => {
+    if (toolbarPosition) annotatorRef.current?.setToolbarPosition(toolbarPosition);
+  }, [toolbarPosition]);
+
+  /**
+   * Follows the prop when it CHANGES, and otherwise leaves it alone.
+   *
+   * That makes the prop usable as a control — a host with its own "hide the
+   * tools" button can drive it — without the effect fighting the presenter
+   * every time they use the toolbar's own minimize button, since their click
+   * does not change the prop.
+   */
+  useEffect(() => {
+    if (toolbarMinimized !== undefined) {
+      annotatorRef.current?.setToolbarMinimized(toolbarMinimized);
+    }
+  }, [toolbarMinimized]);
 
   useEffect(() => () => ownedTransport?.close(), [ownedTransport]);
 
@@ -152,4 +183,5 @@ export function PresenterAnnotate(props: Omit<AnnotationProviderProps, 'children
 
 export { createAnnotator } from '../core';
 export { createLocalTransport, createWebSocketTransport } from '../core/transport';
+export { TOOLBAR_POSITIONS, type ToolbarPosition } from '../core/toolbar';
 export type { AnnotationColor, AnnotationShape, AnnotationTool, Transport } from '../core/types';
